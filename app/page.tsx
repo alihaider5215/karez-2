@@ -79,6 +79,8 @@ function normalizeTenderData(extracted: any, fileName: string): TenderCompliance
   const cleanTitle = fileName.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
 
   return {
+    procurementType: extracted?.procurementType || 'WORKS_SERVICES_GOODS',
+    disposalDetails: extracted?.disposalDetails || null,
     extractedDate: extracted?.extractedDate || new Date().toISOString().split('T')[0],
     documentFileName: extracted?.documentFileName || fileName,
     totalPages: extracted?.totalPages || 1,
@@ -93,7 +95,7 @@ function normalizeTenderData(extracted: any, fileName: string): TenderCompliance
       ppraRuleReference: extracted?.basicInfo?.ppraRuleReference || 'PPRA Rules 2004 (Rule 36-b)',
       sourcePage: extracted?.basicInfo?.sourcePage || 1,
     },
-    pecRequirement: {
+    pecRequirement: (extracted?.procurementType === 'DISPOSAL_AUCTION' || extracted?.pecRequirement === null) ? null : {
       requiredCategory: (extracted?.pecRequirement?.requiredCategory || 'C-3') as PECCategory,
       specializationCodes: extracted?.pecRequirement?.specializationCodes || ['CE01', 'CE02', 'BC01'],
       validityRequirement: extracted?.pecRequirement?.validityRequirement || 'Active FY 2026-27',
@@ -391,13 +393,13 @@ export default function Home() {
             title: `${file.name} - Page 1`,
             imageUrl: base64Data,
             extractedClauses: [
-              {
+              ...(normalizedData.pecRequirement ? [{
                 id: 'custom-clause-1',
                 title: 'PEC Category & Specialization Requirements',
                 text: normalizedData.pecRequirement.clauseText,
-                category: 'pecLicensing',
+                category: 'pecLicensing' as any,
                 confidence: normalizedData.pecRequirement.confidenceScore,
-              },
+              }] : []),
               {
                 id: 'custom-clause-2',
                 title: 'Financial Turnover & CDR Bid Security',

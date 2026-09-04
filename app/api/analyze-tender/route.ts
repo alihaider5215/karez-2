@@ -31,7 +31,9 @@ tender documents issued by NHA, LDA, C&W, WAPDA, PITB, and other Pakistani
 procuring agencies.
 
 CRITICAL RULES:
-- Never guess or estimate numbers. If a value is not explicitly stated, set it to null.
+- NEVER invent, estimate, or fill in a typical/default value for any requirement (PEC category, turnover, liquid assets, CDR amount, PPRA reference number, or bidding procedure) if it is not explicitly written in the document text. If a value is not explicitly stated, return null for that field. Returning null is always correct when the document doesn't state a value — inventing a plausible-sounding number is a serious error.
+- First classify the tender into a new field called procurementType, with one of these exact values: WORKS_SERVICES_GOODS (a competitive tender to hire a contractor/supplier) or DISPOSAL_AUCTION (government selling off surplus/unserviceable items via auction).
+- If procurementType is DISPOSAL_AUCTION, set pecRequirement and the turnover/liquid-assets fields inside financialCriteria to null — these don't apply to auctions. Instead extract a new object called disposalDetails with: documentFeePKR, securityDepositPKR, securityDepositRefundable (true/false), paymentTermsText, forfeitureConditionsText, and penaltyClauseText.
 - Extract exact PKR amounts as integers without commas or currency symbols.
 - For PEC categories, only use these exact values: C-A, C-B, C-1, C-2, C-3, C-4, C-5, C-6
 - Read ALL pages carefully. Financial criteria are often on pages 5-15.
@@ -43,6 +45,15 @@ CRITICAL RULES:
 Extract and return ONLY this JSON with no other text:
 
 {
+  "procurementType": "WORKS_SERVICES_GOODS or DISPOSAL_AUCTION",
+  "disposalDetails": {
+    "documentFeePKR": integer or null,
+    "securityDepositPKR": integer or null,
+    "securityDepositRefundable": boolean or null,
+    "paymentTermsText": "string or null",
+    "forfeitureConditionsText": "string or null",
+    "penaltyClauseText": "string or null"
+  },
   "basicInfo": {
     "tenderId": "string or null",
     "tenderTitle": "full project name as written",
@@ -148,6 +159,8 @@ Extract and return ONLY this JSON with no other text:
     if (!extractedData) {
       console.warn('All Gemini models experienced high demand (503). Providing resilient PPRA compliance template fallback.', lastError);
       extractedData = {
+        procurementType: 'WORKS_SERVICES_GOODS',
+        disposalDetails: null,
         isFallback: true,
         basicInfo: {
           tenderId: 'PPRA-2026-NHA-FALLBACK',

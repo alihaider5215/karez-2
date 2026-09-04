@@ -87,6 +87,8 @@ export const SAMPLE_TENDERS: SampleTenderDoc[] = [
       },
     ],
     extractedData: {
+      procurementType: 'WORKS_SERVICES_GOODS',
+      disposalDetails: null,
       basicInfo: {
         tenderId: 'NHA/P&CA/E35/2026/104',
         tenderTitle: 'Dualization & Widening of E-35 Express Highway Section-III',
@@ -224,6 +226,8 @@ export const SAMPLE_TENDERS: SampleTenderDoc[] = [
       },
     ],
     extractedData: {
+      procurementType: 'WORKS_SERVICES_GOODS',
+      disposalDetails: null,
       basicInfo: {
         tenderId: 'WAPDA-HYD-DASU-2026-04',
         tenderTitle: 'Dasu Hydropower Project Stage-I Infrastructure',
@@ -336,6 +340,8 @@ export const SAMPLE_TENDERS: SampleTenderDoc[] = [
       },
     ],
     extractedData: {
+      procurementType: 'WORKS_SERVICES_GOODS',
+      disposalDetails: null,
       basicInfo: {
         tenderId: 'LDA/ENG/2026-FLY-09',
         tenderTitle: 'Construction of Lahore Elevated Arterial Flyover',

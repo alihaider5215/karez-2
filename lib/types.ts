@@ -5,6 +5,8 @@
 
 export type PECCategory = 'C-A' | 'C-B' | 'C-1' | 'C-2' | 'C-3' | 'C-4' | 'C-5' | 'C-6';
 
+export type ProcurementType = 'WORKS_SERVICES_GOODS' | 'DISPOSAL_AUCTION';
+
 export type BiddingProcedure = 
   | 'Single Stage - One Envelope (PPRA Rule 36-a)'
   | 'Single Stage - Two Envelope (PPRA Rule 36-b)'
@@ -20,9 +22,18 @@ export type ProcuringAgency =
   | 'PHE (Public Health Engineering)'
   | 'Pak PWD (Pakistan Public Works Department)';
 
-export type ComplianceStatus = 'PASSED' | 'FAILED - DISQUALIFICATION RISK' | 'FLAGGED FOR HUMAN REVIEW';
+export type ComplianceStatus = 'PASSED' | 'FAILED - DISQUALIFICATION RISK' | 'FLAGGED FOR HUMAN REVIEW' | 'NOT APPLICABLE';
 
 export type CategoryKey = 'basicInfo' | 'pecLicensing' | 'financials' | 'affidavits' | 'jvRules';
+
+export interface DisposalDetails {
+  documentFeePKR: number | null;
+  securityDepositPKR: number | null;
+  securityDepositRefundable: boolean | null;
+  paymentTermsText: string | null;
+  forfeitureConditionsText: string | null;
+  penaltyClauseText: string | null;
+}
 
 export interface TenderBasicInfo {
   tenderId: string;
@@ -80,8 +91,10 @@ export interface JVRules {
 }
 
 export interface TenderComplianceData {
+  procurementType: ProcurementType;
+  disposalDetails?: DisposalDetails | null;
   basicInfo: TenderBasicInfo;
-  pecRequirement: PECRequirement;
+  pecRequirement: PECRequirement | null;
   financialCriteria: FinancialCriteria;
   affidavits: StampPaperAffidavit[];
   jvRules: JVRules;

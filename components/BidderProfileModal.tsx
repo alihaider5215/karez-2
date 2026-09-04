@@ -22,6 +22,17 @@ export function BidderProfileModal({
 
   if (!isOpen) return null;
 
+  const isUnusuallyLarge = (val: number | undefined | null): boolean => {
+    if (!val || isNaN(val)) return false;
+    const numDigits = String(Math.floor(Math.abs(val))).length;
+    return val > 500_000_000_000 || numDigits > 12;
+  };
+
+  const hasFinancialError =
+    isUnusuallyLarge(formData.avgAnnualTurnoverPKR) ||
+    isUnusuallyLarge(formData.liquidAssetsPKR) ||
+    isUnusuallyLarge(formData.cdrAvailableAmountPKR);
+
   const handleChange = (field: keyof BidderProfile, value: any) => {
     setFormData((prev) => ({
       ...prev,
@@ -30,6 +41,7 @@ export function BidderProfileModal({
   };
 
   const handleSave = () => {
+    if (hasFinancialError) return;
     onSave(formData);
     onClose();
   };
@@ -113,8 +125,8 @@ export function BidderProfileModal({
             </div>
           </div>
 
-          {/* Financial Turnover & CDR */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Financial Turnover, Liquid Assets & CDR */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="font-bold text-[#00401A] block mb-1">
                 3-Year Avg Turnover (PKR)
@@ -124,11 +136,47 @@ export function BidderProfileModal({
                 value={formData.avgAnnualTurnoverPKR || ''}
                 onChange={(e) => handleChange('avgAnnualTurnoverPKR', Number(e.target.value))}
                 placeholder="e.g. 850000000 for PKR 850 Million"
-                className="w-full bg-white border border-[#CDE0D2] focus:border-[#00401A] focus:ring-1 focus:ring-[#00401A] rounded-lg p-2.5 text-slate-900 focus:outline-none font-mono"
+                className={`w-full bg-white border ${
+                  isUnusuallyLarge(formData.avgAnnualTurnoverPKR)
+                    ? 'border-rose-500 ring-1 ring-rose-500'
+                    : 'border-[#CDE0D2] focus:border-[#00401A] focus:ring-1 focus:ring-[#00401A]'
+                } rounded-lg p-2.5 text-slate-900 focus:outline-none font-mono`}
               />
-              <span className="text-[10px] text-slate-500 mt-1 block">
-                Formatted: {formatPKR(formData.avgAnnualTurnoverPKR)}
-              </span>
+              {isUnusuallyLarge(formData.avgAnnualTurnoverPKR) ? (
+                <p className="text-rose-600 font-semibold text-[11px] mt-1">
+                  {"This number looks unusually large — please double check you haven't added extra zeros"}
+                </p>
+              ) : (
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  Formatted: {formatPKR(formData.avgAnnualTurnoverPKR)}
+                </span>
+              )}
+            </div>
+
+            <div>
+              <label className="font-bold text-[#00401A] block mb-1">
+                Liquid Assets / Working Capital (PKR)
+              </label>
+              <input
+                type="number"
+                value={formData.liquidAssetsPKR || ''}
+                onChange={(e) => handleChange('liquidAssetsPKR', Number(e.target.value))}
+                placeholder="e.g. 150000000 for PKR 150 Million"
+                className={`w-full bg-white border ${
+                  isUnusuallyLarge(formData.liquidAssetsPKR)
+                    ? 'border-rose-500 ring-1 ring-rose-500'
+                    : 'border-[#CDE0D2] focus:border-[#00401A] focus:ring-1 focus:ring-[#00401A]'
+                } rounded-lg p-2.5 text-slate-900 focus:outline-none font-mono`}
+              />
+              {isUnusuallyLarge(formData.liquidAssetsPKR) ? (
+                <p className="text-rose-600 font-semibold text-[11px] mt-1">
+                  {"This number looks unusually large — please double check you haven't added extra zeros"}
+                </p>
+              ) : (
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  Formatted: {formatPKR(formData.liquidAssetsPKR)}
+                </span>
+              )}
             </div>
 
             <div>
@@ -140,11 +188,21 @@ export function BidderProfileModal({
                 value={formData.cdrAvailableAmountPKR || ''}
                 onChange={(e) => handleChange('cdrAvailableAmountPKR', Number(e.target.value))}
                 placeholder="e.g. 850000000 for PKR 850 Million"
-                className="w-full bg-white border border-[#CDE0D2] focus:border-[#00401A] focus:ring-1 focus:ring-[#00401A] rounded-lg p-2.5 text-slate-900 focus:outline-none font-mono"
+                className={`w-full bg-white border ${
+                  isUnusuallyLarge(formData.cdrAvailableAmountPKR)
+                    ? 'border-rose-500 ring-1 ring-rose-500'
+                    : 'border-[#CDE0D2] focus:border-[#00401A] focus:ring-1 focus:ring-[#00401A]'
+                } rounded-lg p-2.5 text-slate-900 focus:outline-none font-mono`}
               />
-              <span className="text-[10px] text-slate-500 mt-1 block">
-                Formatted: {formatPKR(formData.cdrAvailableAmountPKR)}
-              </span>
+              {isUnusuallyLarge(formData.cdrAvailableAmountPKR) ? (
+                <p className="text-rose-600 font-semibold text-[11px] mt-1">
+                  {"This number looks unusually large — please double check you haven't added extra zeros"}
+                </p>
+              ) : (
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  Formatted: {formatPKR(formData.cdrAvailableAmountPKR)}
+                </span>
+              )}
             </div>
           </div>
 
@@ -241,7 +299,8 @@ export function BidderProfileModal({
             </button>
             <button
               onClick={handleSave}
-              className="px-5 py-2 rounded-lg bg-[#00401A] hover:bg-[#003315] text-white font-extrabold flex items-center gap-1.5 shadow-md shadow-[#00401A]/20 transition-all cursor-pointer"
+              disabled={hasFinancialError}
+              className="px-5 py-2 rounded-lg bg-[#00401A] hover:bg-[#003315] disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-extrabold flex items-center gap-1.5 shadow-md shadow-[#00401A]/20 transition-all cursor-pointer"
             >
               <Check className="w-4 h-4 text-white" />
               <span>Apply & Re-Audit</span>

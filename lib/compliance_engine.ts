@@ -93,7 +93,11 @@ export function auditBidderEligibility(
   let pecRiskLevel: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'NONE' = 'NONE';
   let pecReason = '';
 
-  if (bidder.pecStatus !== 'ACTIVE') {
+  if (tenderData?.procurementType === 'DISPOSAL_AUCTION') {
+    pecStatus = 'NOT APPLICABLE';
+    pecRiskLevel = 'NONE';
+    pecReason = 'This is a disposal/auction tender; PEC licensing and construction turnover requirements do not apply';
+  } else if (bidder.pecStatus !== 'ACTIVE') {
     pecStatus = 'FAILED - DISQUALIFICATION RISK';
     pecRiskLevel = 'CRITICAL';
     pecReason = `Bidder PEC License status is '${bidder.pecStatus}'. PPRA mandates active valid registration for current financial year.`;
@@ -134,7 +138,11 @@ export function auditBidderEligibility(
   let specRiskLevel: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'NONE' = 'NONE';
   let specReason = '';
 
-  if (missingCodes.length > 0) {
+  if (tenderData?.procurementType === 'DISPOSAL_AUCTION') {
+    specStatus = 'NOT APPLICABLE';
+    specRiskLevel = 'NONE';
+    specReason = 'This is a disposal/auction tender; PEC licensing and construction turnover requirements do not apply';
+  } else if (missingCodes.length > 0) {
     specStatus = 'FAILED - DISQUALIFICATION RISK';
     specRiskLevel = 'HIGH';
     specReason = `Bidder PEC registration is missing required specialization code(s): ${missingCodes.join(', ')}.`;
@@ -169,7 +177,11 @@ export function auditBidderEligibility(
   let turnoverRiskLevel: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'NONE' = 'NONE';
   let turnoverReason = '';
 
-  if (bidderTurnover < reqTurnover) {
+  if (tenderData?.procurementType === 'DISPOSAL_AUCTION') {
+    turnoverStatus = 'NOT APPLICABLE';
+    turnoverRiskLevel = 'NONE';
+    turnoverReason = 'This is a disposal/auction tender; PEC licensing and construction turnover requirements do not apply';
+  } else if (bidderTurnover < reqTurnover) {
     turnoverStatus = 'FAILED - DISQUALIFICATION RISK';
     turnoverRiskLevel = 'CRITICAL';
     turnoverReason = `Bidder 3-Year Avg Annual Turnover (${formatPKR(bidderTurnover)}) is below the required threshold of ${formatPKR(reqTurnover)}. Deficit: ${formatPKR(reqTurnover - bidderTurnover)}.`;
@@ -206,7 +218,11 @@ export function auditBidderEligibility(
     let liquidRiskLevel: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'NONE' = 'NONE';
     let liquidReason = '';
 
-    if (bidderLiquid < reqLiquid) {
+    if (tenderData?.procurementType === 'DISPOSAL_AUCTION') {
+      liquidStatus = 'NOT APPLICABLE';
+      liquidRiskLevel = 'NONE';
+      liquidReason = 'This is a disposal/auction tender; PEC licensing and construction turnover requirements do not apply';
+    } else if (bidderLiquid < reqLiquid) {
       liquidStatus = 'FAILED - DISQUALIFICATION RISK';
       liquidRiskLevel = 'HIGH';
       liquidReason = `Bidder available Liquid Assets / Working Capital (${formatPKR(bidderLiquid)}) is less than required ${formatPKR(reqLiquid)}.`;
@@ -412,6 +428,84 @@ export function auditBidderEligibility(
       isLowConfidenceWarning: jvRules.confidenceScore < 85,
       humanApproved: false,
     });
+  }
+
+  // ==========================================
+  // 5. DISPOSAL / AUCTION DETAILS AUDIT
+  // ==========================================
+  if (tenderData?.procurementType === 'DISPOSAL_AUCTION' && tenderData?.disposalDetails) {
+    const details = tenderData.disposalDetails;
+    
+    // Check Security Deposit
+    if (details.securityDepositPKR) {
+      let secStatus: ComplianceStatus = 'PASSED';
+      let secRiskLevel: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'NONE' = 'NONE';
+      let secReason = '';
+      if ((bidder.cdrAvailableAmountPKR || 0) < details.securityDepositPKR) {
+        secStatus = 'FAILED - DISQUALIFICATION RISK';
+        secRiskLevel = 'CRITICAL';
+        secReason = `Bidder security deposit / CDR (${formatPKR(bidder.cdrAvailableAmountPKR || 0)}) is below required auction security deposit (${formatPKR(details.securityDepositPKR)}).`;
+      }
+      
+      items.push({
+        id: 'auction-security-deposit-check',
+        category: 'financials',
+        categoryTitle: 'Auction Details & Security Deposit',
+        ruleTitle: 'Auction Security Deposit',
+        extractedClauseText: 'Security Deposit for Auction Participation',
+        sourcePage: 1,
+        requiredValueText: `${formatPKR(details.securityDepositPKR)} (Refundable: ${details.securityDepositRefundable ? 'Yes' : 'No'})`,
+        bidderValueText: `${formatPKR(bidder.cdrAvailableAmountPKR || 0)}`,
+        status: secStatus,
+        disqualificationRiskLevel: secRiskLevel,
+        disqualificationReason: secReason,
+        confidenceScore: 90,
+        isLowConfidenceWarning: false,
+        humanApproved: false,
+        ppraClauseRef: 'PPRA Rule for Auctions / Disposals',
+      });
+    }
+    
+    // Check Document Fee
+    if (details.documentFeePKR) {
+      items.push({
+        id: 'auction-document-fee-check',
+        category: 'financials',
+        categoryTitle: 'Auction Details & Security Deposit',
+        ruleTitle: 'Tender Document Fee',
+        extractedClauseText: 'Tender Document / Auction Fee',
+        sourcePage: 1,
+        requiredValueText: `${formatPKR(details.documentFeePKR)} (Non-Refundable)`,
+        bidderValueText: 'Payment receipt subject to manual verification',
+        status: 'FLAGGED FOR HUMAN REVIEW',
+        disqualificationRiskLevel: 'NONE',
+        disqualificationReason: 'Ensure bidder has attached the original receipt for the document fee.',
+        confidenceScore: 90,
+        isLowConfidenceWarning: false,
+        humanApproved: false,
+        ppraClauseRef: 'PPRA Rule for Tender Fee',
+      });
+    }
+    
+    // Check Payment terms
+    if (details.paymentTermsText || details.forfeitureConditionsText || details.penaltyClauseText) {
+      items.push({
+        id: 'auction-terms-conditions-check',
+        category: 'basicInfo',
+        categoryTitle: 'Auction Terms & Conditions',
+        ruleTitle: 'Payment & Forfeiture Terms',
+        extractedClauseText: `${details.paymentTermsText || ''} ${details.forfeitureConditionsText || ''} ${details.penaltyClauseText || ''}`.trim(),
+        sourcePage: 1,
+        requiredValueText: 'Acceptance of Terms',
+        bidderValueText: 'Affidavit/Declaration required',
+        status: 'FLAGGED FOR HUMAN REVIEW',
+        disqualificationRiskLevel: 'NONE',
+        disqualificationReason: 'Ensure bidder has explicitly agreed to the auction payment, forfeiture, and penalty terms in their submitted affidavit.',
+        confidenceScore: 90,
+        isLowConfidenceWarning: false,
+        humanApproved: false,
+      });
+    }
   }
 
   // ==========================================
