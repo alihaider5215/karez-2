@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Building2, ChevronDown, Check, Plus } from 'lucide-react';
+import { Building2, ChevronDown, Check, Plus, Sliders } from 'lucide-react';
 
 interface ClientSwitcherProps {
   companies: any[];
   currentCompanyId: string | null;
   onSelectCompany: (company: any) => void;
   onCreateCompany: () => void;
+  onEditCompany?: () => void;
 }
 
 export function ClientSwitcher({
@@ -15,6 +16,7 @@ export function ClientSwitcher({
   currentCompanyId,
   onSelectCompany,
   onCreateCompany,
+  onEditCompany,
 }: ClientSwitcherProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -84,6 +86,20 @@ export function ClientSwitcher({
           </div>
 
           <div className="border-t border-gray-700 my-1" />
+
+          {currentCompanyId && (
+            <button
+              type="button"
+              onClick={() => {
+                onEditCompany?.();
+                setIsOpen(false);
+              }}
+              className="w-full text-left px-3 py-2.5 hover:bg-gray-800 flex items-center gap-2 text-sm text-blue-400 font-medium transition-colors cursor-pointer"
+            >
+              <Sliders className="w-4 h-4 text-blue-400 shrink-0" />
+              <span>Edit Selected Client</span>
+            </button>
+          )}
 
           <button
             type="button"

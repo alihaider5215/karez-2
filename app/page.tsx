@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { saveTenderAnalysis, saveBidderProfile, getBidderProfile, getTendersByUser, createCompany, getCompaniesByUser, updateCompany, saveTenderToCompany, getTendersByCompany } from '../lib/firestoreService';
 import { ClientSwitcher } from '../components/ClientSwitcher';
 import { Header } from '../components/Header';
+import { renderPdfToImages } from '../lib/pdf_pages';
 import { PdfDocumentViewer } from '../components/PdfDocumentViewer';
 import { ComplianceChecklist } from '../components/ComplianceChecklist';
 import { BidderProfileModal } from '../components/BidderProfileModal';
@@ -161,6 +162,23 @@ function normalizeTenderData(extracted: any, fileName: string): TenderCompliance
   };
 }
 
+const BLANK_BIDDER_PROFILE: BidderProfile = {
+  companyName: '',
+  pecCategory: 'C-6',
+  pecSpecializationCodes: [],
+  pecValidityDate: new Date().toISOString().split('T')[0],
+  pecStatus: 'ACTIVE',
+  avgAnnualTurnoverPKR: 0,
+  netWorthPKR: 0,
+  liquidAssetsPKR: 0,
+  cdrAvailableAmountPKR: 0,
+  bankRating: 'A',
+  uploadedAffidavits: [],
+  isJV: false,
+  ntnStatus: 'ACTIVE_TAXPAYER',
+  fbrRegistrationNumber: '',
+};
+
 export default function Home() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
@@ -169,9 +187,7 @@ export default function Home() {
   const [language, setLanguage] = useState<'en' | 'ur'>('en');
 
   const [currentTender, setCurrentTender] = useState<SampleTenderDoc | TenderComplianceData | any | null>(null);
-  const [currentBidder, setCurrentBidder] = useState<BidderProfile>(
-    SAMPLE_TENDERS[0].defaultBidderProfile
-  );
+  const [currentBidder, setCurrentBidder] = useState<BidderProfile>(BLANK_BIDDER_PROFILE);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [highlightedClauseId, setHighlightedClauseId] = useState<string | undefined>(undefined);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
@@ -219,6 +235,10 @@ export default function Home() {
             setCurrentBidder(profileData);
             const tenders = await getTendersByCompany(user.uid, newCompanyId);
             setSavedTenders(tenders);
+          } else {
+            // New user, completely fresh account
+            setCurrentBidder(BLANK_BIDDER_PROFILE);
+            setIsBidderModalOpen(true);
           }
         } else {
           setCompanies(userCompanies);
@@ -253,25 +273,13 @@ export default function Home() {
 
   const handleCreateCompany = async () => {
     if (!user) return;
-    const defaultProfile = {
-      companyName: 'New Client Company',
-      pecCategory: 'C-3',
-      pecStatus: 'ACTIVE',
-      avgAnnualTurnoverPKR: 0,
-      cdrAvailableAmountPKR: 0,
-      liquidAssetsPKR: 0,
-      ntnNumber: '',
-      ntnStatus: 'ACTIVE_TAXPAYER',
-      bankRating: 'AA',
-      isJV: false,
-      uploadedAffidavits: [],
-    };
     try {
-      const newCompanyId = await createCompany(user.uid, defaultProfile);
+      // Temporarily use BLANK_BIDDER_PROFILE for the initial company document
+      const newCompanyId = await createCompany(user.uid, BLANK_BIDDER_PROFILE);
       const freshCompanies = await getCompaniesByUser(user.uid);
       setCompanies(freshCompanies);
       setCurrentCompanyId(newCompanyId);
-      setCurrentBidder(defaultProfile as any);
+      setCurrentBidder(BLANK_BIDDER_PROFILE);
       setSavedTenders([]);
       setIsBidderModalOpen(true);
     } catch (err) {
@@ -337,6 +345,12 @@ export default function Home() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (!currentBidder?.companyName || currentBidder.companyName.trim() === '') {
+      alert("Please fill out your Bidder Profile (Company Name, PEC Category, etc.) before uploading a tender document.");
+      setIsBidderModalOpen(true);
+      return;
+    }
+
     setIsFallbackData(false);
     setIsAnalyzing(true);
     setAnalysisStage('⚡ Optimizing scan resolution & compressing document payload...');
@@ -351,19 +365,46 @@ export default function Home() {
 
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 50000); // 50s timeout for AI response
+        
+        let body: FormData | string;
+        let headers: Record<string, string> = {};
 
-        const res = await fetch('/api/analyze-tender', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: base64Data, mimeType }),
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
+        if (file.type === 'application/pdf') {
+          try {
+            setAnalysisStage('Rendering PDF pages...');
+            const { pageImages, numPages } = await renderPdfToImages(file, 12);
+            setAnalysisStage(`Analysing ${Math.min(numPages, 12)} of ${numPages} pages...`);
+            const formData = new FormData();
+            formData.append('pages', JSON.stringify(pageImages));
+            body = formData;
+          } catch {
+            setAnalysisStage('Analysing document...');
+            const formData = new FormData();
+            formData.append('file', file);
+            body = formData;
+          }
+        } else {
+          const formData = new FormData();
+          formData.append('file', file);
+          body = formData;
+        }
 
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && data.extractedData) {
+        const timeoutId = setTimeout(() => controller.abort(), 50000);
+
+        let response: Response;
+        try {
+          response = await fetch('/api/analyze-tender', {
+            method: 'POST',
+            signal: controller.signal,
+            body: body,
+          });
+        } finally {
+          clearTimeout(timeoutId);
+        }
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.extractedData) {
             extractedData = data.extractedData;
             setIsFallbackData(extractedData?.isFallback === true);
           }
@@ -457,6 +498,7 @@ export default function Home() {
             currentCompanyId={currentCompanyId}
             onSelectCompany={handleSelectCompany}
             onCreateCompany={handleCreateCompany}
+            onEditCompany={() => setIsBidderModalOpen(true)}
           />
         }
         onOpenBidderModal={() => setIsBidderModalOpen(true)}

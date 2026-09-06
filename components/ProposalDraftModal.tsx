@@ -128,7 +128,7 @@ export function ProposalDraftModal({
     if (!printWindow) return;
     printWindow.document.write(`
       <!DOCTYPE html>
-      <html>
+      <html >
         <head>
           <title>${proposalData?.proposalTitle || 'Technical Proposal'}</title>
           <style>
@@ -407,7 +407,7 @@ export function ProposalDraftModal({
               Generating your technical proposal...
             </h3>
             <p className="text-sm text-gray-400 mt-2 max-w-md">
-              This may take 20–30 seconds as Gemini crafts customized technical
+              This may take 20–30 seconds as Karez crafts customized technical
               sections under PPRA Rules 2004.
             </p>
           </div>

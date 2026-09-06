@@ -199,7 +199,7 @@ PEC No: ${pecNo}`;
     const printWin = window.open('', '_blank');
     if (printWin) {
       printWin.document.write(`<!DOCTYPE html>
-<html>
+<html >
 <head>
   <title>Affidavit Draft - ${selectedType.toUpperCase()} - M/s ${firmName}</title>
   <style>

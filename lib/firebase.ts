@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore } from 'firebase/firestore';
 import firebaseConfigJson from '../firebase-applet-config.json';
 
 const firebaseConfig = {
@@ -18,6 +18,9 @@ const dbId = firebaseConfigJson.firestoreDatabaseId && firebaseConfigJson.firest
   ? firebaseConfigJson.firestoreDatabaseId
   : undefined;
 
-export const db = dbId ? getFirestore(app, dbId) : getFirestore(app);
+export const db = dbId 
+  ? initializeFirestore(app, { experimentalForceLongPolling: true }, dbId)
+  : initializeFirestore(app, { experimentalForceLongPolling: true });
+
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();

@@ -20,6 +20,12 @@ export function BidderProfileModal({
 }: BidderProfileModalProps) {
   const [formData, setFormData] = useState<BidderProfile>(bidder);
 
+  React.useEffect(() => {
+    if (isOpen) {
+      setFormData(bidder);
+    }
+  }, [isOpen, bidder]);
+
   if (!isOpen) return null;
 
   const isUnusuallyLarge = (val: number | undefined | null): boolean => {
@@ -33,6 +39,8 @@ export function BidderProfileModal({
     isUnusuallyLarge(formData.liquidAssetsPKR) ||
     isUnusuallyLarge(formData.cdrAvailableAmountPKR);
 
+  const isInvalid = hasFinancialError || !formData.companyName || formData.companyName.trim() === '';
+
   const handleChange = (field: keyof BidderProfile, value: any) => {
     setFormData((prev) => ({
       ...prev,
@@ -41,7 +49,7 @@ export function BidderProfileModal({
   };
 
   const handleSave = () => {
-    if (hasFinancialError) return;
+    if (isInvalid) return;
     onSave(formData);
     onClose();
   };
@@ -299,7 +307,7 @@ export function BidderProfileModal({
             </button>
             <button
               onClick={handleSave}
-              disabled={hasFinancialError}
+              disabled={isInvalid}
               className="px-5 py-2 rounded-lg bg-[#00401A] hover:bg-[#003315] disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-extrabold flex items-center gap-1.5 shadow-md shadow-[#00401A]/20 transition-all cursor-pointer"
             >
               <Check className="w-4 h-4 text-white" />

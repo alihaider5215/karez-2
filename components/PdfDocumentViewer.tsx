@@ -54,7 +54,7 @@ export function PdfDocumentViewer({
             Source: {tender.extractedData?.documentFileName || tender.title}
           </span>
           <span className="text-[10px] bg-[#E6F2EB] text-[#00401A] border border-[#00401A]/20 px-1.5 py-0.2 rounded font-mono hidden md:inline-block font-semibold">
-            {tender.ppraRef}
+            {tender.ppraRef || tender.extractedData?.basicInfo?.tenderId || "PPRA REF PENDING"}
           </span>
         </div>
 
@@ -104,13 +104,13 @@ export function PdfDocumentViewer({
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
             <span className="font-mono text-[11px] text-slate-800 px-1">
-              <span className="text-[#00401A] font-extrabold">{currentPage}</span> / {tender.extractedData?.totalPages || tender.pages.length}
+              <span className="text-[#00401A] font-extrabold">{currentPage}</span> / {tender.extractedData?.totalPages || tender.pages?.length || 1}
             </span>
             <button
               onClick={() =>
-                onPageChange(Math.min(tender.extractedData?.totalPages || tender.pages.length, currentPage + 1))
+                onPageChange(Math.min(tender.extractedData?.totalPages || tender.pages?.length || 1, currentPage + 1))
               }
-              disabled={currentPage === (tender.extractedData?.totalPages || tender.pages.length)}
+              disabled={currentPage === (tender.extractedData?.totalPages || tender.pages?.length || 1)}
               className="disabled:opacity-30 text-slate-600 hover:text-[#00401A] transition-colors"
             >
               <ChevronRight className="w-3.5 h-3.5" />
@@ -151,7 +151,7 @@ export function PdfDocumentViewer({
                 (Government of Pakistan • PPRA Rule 36-b)
               </div>
               <div className="text-[11px] font-mono font-semibold text-slate-700 mt-1">
-                Tender Ref: {tender.ppraRef} • Page {currentPage} of {tender.extractedData?.totalPages || tender.pages.length}
+                Tender Ref: {tender.ppraRef || tender.extractedData?.basicInfo?.tenderId || "PPRA REF PENDING"} • Page {currentPage} of {tender.extractedData?.totalPages || tender.pages?.length || 1}
               </div>
             </div>
 

@@ -1,77 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenAI, Type } from '@google/genai';
+import { generateWithProviders } from '../../../lib/ai_provider';
 
-export const maxDuration = 60; // Allow up to 60s for vision analysis
+export const maxDuration = 90;
 
-export async function POST(req: NextRequest) {
-  try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'GEMINI_API_KEY environment variable is missing.' },
-        { status: 500 }
-      );
-    }
-
-    const ai = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        },
-      },
-    });
-
-    const body = await req.json();
-    const { imageBase64, mimeType = 'image/png', customPrompt } = body;
-
-    const visionPrompt = customPrompt || `You are Karez 2.0, a specialist AI for Pakistani government procurement under
-PPRA Rules 2004. Your job is to extract EXACT numerical and legal values from
-tender documents issued by NHA, LDA, C&W, WAPDA, PITB, and other Pakistani
-procuring agencies.
+const EXTRACTION_PROMPT = `You are Karez 2.0, a specialist AI for Pakistani government procurement under
+PPRA Rules 2004. Extract EXACT numerical and legal values from tender documents.
 
 CRITICAL RULES:
-- NEVER invent, estimate, or fill in a typical/default value for any requirement (PEC category, turnover, liquid assets, CDR amount, PPRA reference number, or bidding procedure) if it is not explicitly written in the document text. If a value is not explicitly stated, return null for that field. Returning null is always correct when the document doesn't state a value — inventing a plausible-sounding number is a serious error.
-- First classify the tender into a new field called procurementType, with one of these exact values: WORKS_SERVICES_GOODS (a competitive tender to hire a contractor/supplier) or DISPOSAL_AUCTION (government selling off surplus/unserviceable items via auction).
-- If procurementType is DISPOSAL_AUCTION, set pecRequirement and the turnover/liquid-assets fields inside financialCriteria to null — these don't apply to auctions. Instead extract a new object called disposalDetails with: documentFeePKR, securityDepositPKR, securityDepositRefundable (true/false), paymentTermsText, forfeitureConditionsText, and penaltyClauseText.
+- NEVER guess or estimate. If a value is not explicitly stated, return null.
 - Extract exact PKR amounts as integers without commas or currency symbols.
-- For PEC categories, only use these exact values: C-A, C-B, C-1, C-2, C-3, C-4, C-5, C-6
-- Read ALL pages carefully. Financial criteria are often on pages 5-15.
-- CDR (Call Deposit Receipt) and Bid Security are different names for the same thing.
-- "Average Annual Turnover" and "Average Annual Construction Turnover" mean the same field.
-- Affidavit requirements are often listed as "undertaking" or "declaration" in Pakistani tenders.
-- Single Stage Two Envelope means technical and financial bids are separate envelopes.
+- Convert Million/Billion wording (e.g. "Rs. 2 Billion" = 2000000000).
+- For PEC categories, only use: C-A, C-B, C-1, C-2, C-3, C-4, C-5, C-6
+- CDR, Bid Security, and Earnest Money are the same field.
+- Record the page number where each value was found.
+- Assign confidenceScore 0-100 (below 85 for faded or smudged text).
 
-Extract and return ONLY this JSON with no other text:
+Return ONLY this JSON with no other text:
 
 {
-  "procurementType": "WORKS_SERVICES_GOODS or DISPOSAL_AUCTION",
-  "disposalDetails": {
-    "documentFeePKR": integer or null,
-    "securityDepositPKR": integer or null,
-    "securityDepositRefundable": boolean or null,
-    "paymentTermsText": "string or null",
-    "forfeitureConditionsText": "string or null",
-    "penaltyClauseText": "string or null"
-  },
   "basicInfo": {
     "tenderId": "string or null",
-    "tenderTitle": "full project name as written",
-    "procuringAgency": "exact agency name",
-    "biddingType": "Single Stage - Two Envelope (PPRA Rule 36-b) or Single Stage - One Envelope (PPRA Rule 36-a)",
+    "tenderTitle": "full project name as written, or null",
+    "procuringAgency": "exact agency name, or null",
+    "biddingType": "procedure as written, or null",
     "submissionDeadline": "date as written or null",
     "estimatedCostPKR": integer or null,
-    "location": "city and province",
-    "ppraRuleReference": "rule number if mentioned",
-    "sourcePage": page number where this info was found
+    "location": "city and province, or null",
+    "ppraRuleReference": "rule number if mentioned, or null",
+    "sourcePage": page number
   },
   "pecRequirement": {
-    "requiredCategory": "C-A or C-B or C-1 through C-6 or null",
-    "specializationCodes": ["array of codes like CE01, BC01 etc"],
-    "validityRequirement": "what validity period is required",
-    "sourcePage": page number,
-    "clauseText": "exact sentence from the document describing PEC requirement",
-    "confidenceScore": number 0-100 indicating how confident the extraction is
+    "requiredCategory": "C-A|C-B|C-1|C-2|C-3|C-4|C-5|C-6 or null",
+    "specializationCodes": [],
+    "validityRequirement": "string or null",
+    "sourcePage": page number or null,
+    "clauseText": "exact sentence from document or null",
+    "confidenceScore": 0-100
   },
   "financialCriteria": {
     "minAvgAnnualTurnoverPKR": integer or null,
@@ -79,157 +43,71 @@ Extract and return ONLY this JSON with no other text:
     "minLiquidAssetsWorkingCapitalPKR": integer or null,
     "cdrAmountPKR": integer or null,
     "cdrPercentage": number or null,
-    "acceptableBankRating": "bank rating requirement or null",
-    "sourcePage": page number
+    "acceptableBankRating": "string or null",
+    "sourcePage": page number or null,
+    "clauseText": "exact sentence or null",
+    "confidenceScore": 0-100
   },
   "technicalCriteria": {
     "minSimilarProjectsPKR": integer or null,
     "minYearsExperience": integer or null,
-    "requiredEquipment": ["list any specific equipment mentioned"],
-    "requiredKeyPersonnel": ["list any required staff qualifications"],
-    "sourcePage": page number
+    "requiredEquipment": [],
+    "requiredKeyPersonnel": [],
+    "sourcePage": page number or null
   },
   "legalRequirements": {
-    "requiredAffidavits": ["list each affidavit or undertaking required"],
+    "requiredAffidavits": [],
     "stampPaperDenomination": integer or null,
     "jvAllowed": true or false,
     "jvLeadPartnerMinShare": number or null,
     "blacklistingClause": true or false,
-    "sourcePage": page number
+    "sourcePage": page number or null
   }
 }`;
 
-    let parts: any[] = [{ text: visionPrompt }];
+export async function POST(req: NextRequest) {
+  try {
+    const formData = await req.formData();
+    const file = formData.get('file') as File | null;
+    const pagesJson = formData.get('pages') as string | null;
 
-    if (imageBase64) {
-      // Strip data URL prefix if present (supports image/png, image/jpeg, application/pdf, etc.)
-      const cleanBase64 = imageBase64.replace(/^data:[\w/+-]+;base64,/, '');
-      parts.push({
-        inlineData: {
-          mimeType,
-          data: cleanBase64,
-        },
+    if (!file && !pagesJson) {
+      return NextResponse.json({ error: 'No file or pages provided.' }, { status: 400 });
+    }
+
+    let parts: any[] = [];
+
+    if (pagesJson) {
+      const pages: string[] = JSON.parse(pagesJson);
+      parts = pages.map((dataUrl: string) => {
+        const base64 = dataUrl.split(',')[1];
+        return { inlineData: { mimeType: 'image/jpeg', data: base64 } };
       });
+    } else if (file) {
+      const buffer = await file.arrayBuffer();
+      const base64 = Buffer.from(buffer).toString('base64');
+      parts = [{ inlineData: { mimeType: file.type || 'application/pdf', data: base64 } }];
     }
 
-    const modelsToTry = [
-      'gemini-3.5-flash',
-      'gemini-3.7-flash',
-      'gemini-3.1-pro-preview',
-      'gemini-flash-latest',
-    ];
+    parts.push({ text: EXTRACTION_PROMPT });
 
-    let extractedData: any = null;
-    let lastError: any = null;
-
-    for (const modelName of modelsToTry) {
-      try {
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error(`Gemini ${modelName} timeout after 50s`)), 50000)
-        );
-        const response = (await Promise.race([
-          ai.models.generateContent({
-            model: modelName,
-            contents: { parts },
-            config: {
-              systemInstruction:
-                'You are an expert Pakistani procurement compliance auditor under PPRA Rules 2004. Extract structured compliance data accurately and assign OCR confidence scores.',
-              responseMimeType: 'application/json',
-            },
-          }),
-          timeoutPromise,
-        ])) as any;
-
-        let responseText = response.text || '{}';
-        // Clean code block wrappers if any
-        responseText = responseText.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
-        extractedData = JSON.parse(responseText);
-        if (extractedData && typeof extractedData === 'object') {
-          break; // Successfully extracted
-        }
-      } catch (modelErr: any) {
-        console.warn(`Gemini model ${modelName} failed or busy (${modelErr?.status || modelErr?.message}), attempting fallback model...`);
-        lastError = modelErr;
-        // Wait 300ms before trying fallback model
-        await new Promise((resolve) => setTimeout(resolve, 300));
-      }
-    }
-
-    // If all models were unavailable (e.g., 503 high demand), return resilient fallback data instead of crashing
-    if (!extractedData) {
-      console.warn('All Gemini models experienced high demand (503). Providing resilient PPRA compliance template fallback.', lastError);
-      extractedData = {
-        procurementType: 'WORKS_SERVICES_GOODS',
-        disposalDetails: null,
-        isFallback: true,
-        basicInfo: {
-          tenderId: 'PPRA-2026-NHA-FALLBACK',
-          tenderTitle: 'Pakistani Construction & Procurement Tender Document',
-          procuringAgency: 'NHA (National Highway Authority)',
-          biddingType: 'Single Stage - Two Envelope (PPRA Rule 36-b)',
-          submissionDeadline: '30 Days from publication',
-          estimatedCostPKR: 450000000,
-          location: 'Pakistan',
-          ppraRuleReference: 'PPRA Rules 2004 (Rule 36-b)',
-          sourcePage: 1
-        },
-        pecRequirement: {
-          requiredCategory: 'C-3',
-          specializationCodes: ['CE01', 'CE02', 'BC01'],
-          validityRequirement: 'Active FY 2026-27',
-          sourcePage: 1,
-          clauseText: 'PEC License Category C-3 or higher required with active specialization codes CE01 and CE02.',
-          confidenceScore: 88
-        },
-        financialCriteria: {
-          minAvgAnnualTurnoverPKR: 350000000,
-          minNetWorthPKR: 80000000,
-          minLiquidAssetsWorkingCapitalPKR: 40000000,
-          cdrAmountPKR: 9000000,
-          cdrPercentage: 2,
-          acceptableBankRating: 'AA or above',
-          sourcePage: 1,
-          clauseText: '3-Year Average Annual Construction Turnover of PKR 350M+ and 2% Earnest Money CDR required.',
-          confidenceScore: 85
-        },
-        affidavits: [
-          {
-            id: 'aff-fallback-1',
-            title: 'Rs. 500 Non-Blacklisting & Correctness Stamp Affidavit',
-            stampPaperDenominationPKR: 500,
-            requiredTextSummary: 'Undertaking on Judicial Stamp Paper of Rs. 500 attesting firm is not blacklisted.',
-            isBlacklistingDeclarationRequired: true,
-            isLitigationHistoryRequired: true,
-            isCorrectnessDeclarationRequired: true,
-            sourcePage: 1,
-            confidenceScore: 90
-          }
-        ],
-        jvRules: {
-          allowedJV: true,
-          maxPartners: 3,
-          leadPartnerMinSharePercent: 50,
-          otherPartnerMinSharePercent: 25,
-          sourcePage: 1,
-          clauseText: 'JV allowed up to 3 partners with Lead partner holding 50%+ share.',
-          confidenceScore: 90
-        },
-        overallOcrConfidence: 87,
-        hasLowConfidenceWarnings: false,
-        lowConfidencePages: []
-      };
-    }
-
-    return NextResponse.json({
-      success: true,
-      extractedData,
+    const result = await generateWithProviders({
+      parts,
+      timeoutMs: 75000,
     });
-  } catch (error: any) {
-    console.error('Tender analysis API error:', error);
+
+    const extractedData = JSON.parse(result.text);
+    return NextResponse.json({
+      extractedData,
+      provider: result.provider,
+      model: result.model,
+      isFallback: false,
+    });
+
+  } catch (err: any) {
+    console.error('Analyze tender error:', err);
     return NextResponse.json(
-      {
-        error: error.message || 'Failed to process tender document with Gemini AI engine.',
-      },
+      { error: err?.message || 'Analysis failed.' },
       { status: 500 }
     );
   }

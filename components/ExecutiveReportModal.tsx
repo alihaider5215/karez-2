@@ -24,7 +24,7 @@ export function ExecutiveReportModal({
 
   const generateReportHtml = () => {
     return `<!DOCTYPE html>
-<html>
+<html >
 <head>
   <meta charset="utf-8">
   <title>Karez 2.0 - PPRA Audit Certificate - ${tender.ppraRef || tender.extractedData?.basicInfo?.ppraReferenceNo || 'N/A'}</title>
@@ -210,7 +210,7 @@ export function ExecutiveReportModal({
     
     printWindow.document.write(`
       <!DOCTYPE html>
-      <html>
+      <html >
         <head>
           <meta charset="utf-8">
           <title>Karez 2.0 — PPRA Audit Certificate</title>
