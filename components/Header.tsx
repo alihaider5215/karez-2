@@ -20,6 +20,7 @@ import {
   Menu,
 } from 'lucide-react';
 import { SampleTenderDoc, BidderProfile, AuditReport } from '../lib/types';
+import { TenderNotesPopover } from './TenderNotesPopover';
 import { SAMPLE_TENDERS, UNDERQUALIFIED_BIDDER_TEST_PROFILE } from '../lib/sample_tenders';
 
 interface HeaderProps {
@@ -44,7 +45,25 @@ interface HeaderProps {
   language?: 'en' | 'ur';
   onToggleLanguage?: () => void;
   clientSwitcher?: React.ReactNode;
+  onSaveTenderNotes?: (tenderId: string, notes: string) => void;
+  onLoadPastTender?: (tender: any) => void;
 }
+
+const getDeadlineBadge = (deadline: string | null | undefined) => {
+  if (!deadline) return null;
+  const parsed = new Date(deadline);
+  if (isNaN(parsed.getTime())) return null;
+  const now = new Date();
+  const diffMs = parsed.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  
+  if (diffDays < 0) return { label: 'Closed', color: 'bg-gray-600 text-gray-300' };
+  if (diffDays === 0) return { label: 'Today!', color: 'bg-red-600 text-white' };
+  if (diffDays === 1) return { label: '1 day', color: 'bg-red-500 text-white' };
+  if (diffDays <= 3) return { label: `${diffDays} days`, color: 'bg-amber-500 text-white' };
+  if (diffDays <= 7) return { label: `${diffDays} days`, color: 'bg-yellow-500 text-gray-900' };
+  return { label: `${diffDays} days`, color: 'bg-gray-600 text-gray-300' };
+};
 
 export function Header({
   currentTender,
@@ -68,6 +87,8 @@ export function Header({
   language = 'en',
   onToggleLanguage,
   clientSwitcher,
+  onSaveTenderNotes,
+  onLoadPastTender,
 }: HeaderProps) {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
@@ -247,32 +268,48 @@ export function Header({
                     </div>
                     <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
                       {savedTenders.map((item, idx) => (
-                        <button
-                          key={item.id || idx}
-                          onClick={() => {
-                            alert(`Tender: ${item.tenderTitle || 'Untitled Tender'}\nAgency: ${item.procuringAgency || 'N/A'}`);
-                            setIsHistoryOpen(false);
-                          }}
-                          className="w-full text-left p-2 rounded-lg bg-slate-950/80 hover:bg-slate-800 border border-slate-800/80 hover:border-emerald-700/50 transition-all cursor-pointer group"
-                        >
-                          <div className="font-medium text-xs text-slate-200 group-hover:text-emerald-300 truncate">
-                            {item.tenderTitle || 'Untitled Tender Analysis'}
+                        <div key={item.id || idx} className="flex gap-1 items-start w-full">
+                          <button
+                            onClick={() => {
+                              onLoadPastTender?.(item);
+                              setIsHistoryOpen(false);
+                            }}
+                            className="flex-1 text-left p-2 rounded-lg bg-slate-950/80 hover:bg-slate-800 border border-slate-800/80 hover:border-emerald-700/50 transition-all cursor-pointer group"
+                          >
+                            <div className="font-medium text-xs text-slate-200 group-hover:text-emerald-300 truncate">
+                              {item.tenderTitle || 'Untitled Tender Analysis'}
+                            </div>
+                            {item.procuringAgency && (
+                              <div className="text-[10px] text-slate-400 truncate mt-0.5 flex items-center gap-2">
+                                <span>{item.procuringAgency}</span>
+                                {(() => {
+                                  const badge = getDeadlineBadge(item.submissionDeadline);
+                                  return badge ? (
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${badge.color}`}>
+                                      {badge.label}
+                                    </span>
+                                  ) : null;
+                                })()}
+                              </div>
+                            )}
+                            {item.createdAt && (
+                              <div className="text-[9px] text-slate-500 mt-0.5">
+                                {new Date(item.createdAt).toLocaleDateString(undefined, {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                })}
+                              </div>
+                            )}
+                          </button>
+                          <div className="pt-2 pr-1">
+                            <TenderNotesPopover
+                              tenderId={item.id}
+                              initialNotes={item.notes || ''}
+                              onSave={onSaveTenderNotes || (() => {})}
+                            />
                           </div>
-                          {item.procuringAgency && (
-                            <div className="text-[10px] text-slate-400 truncate mt-0.5">
-                              {item.procuringAgency}
-                            </div>
-                          )}
-                          {item.createdAt && (
-                            <div className="text-[9px] text-slate-500 mt-0.5">
-                              {new Date(item.createdAt).toLocaleDateString(undefined, {
-                                month: 'short',
-                                day: 'numeric',
-                                year: 'numeric',
-                              })}
-                            </div>
-                          )}
-                        </button>
+                        </div>
                       ))}
                     </div>
                   </div>

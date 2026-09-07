@@ -4,12 +4,13 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Loader2, TriangleAlert, X, UploadCloud } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { saveTenderAnalysis, saveBidderProfile, getBidderProfile, getTendersByUser, createCompany, getCompaniesByUser, updateCompany, saveTenderToCompany, getTendersByCompany } from '../lib/firestoreService';
+import { saveTenderAnalysis, saveBidderProfile, getBidderProfile, getTendersByUser, createCompany, getCompaniesByUser, updateCompany, saveTenderToCompany, getTendersByCompany, updateTenderNotes, getTenderAnalysis } from '../lib/firestoreService';
 import { ClientSwitcher } from '../components/ClientSwitcher';
 import { Header } from '../components/Header';
 import { renderPdfToImages } from '../lib/pdf_pages';
 import { PdfDocumentViewer } from '../components/PdfDocumentViewer';
 import { ComplianceChecklist } from '../components/ComplianceChecklist';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { BidderProfileModal } from '../components/BidderProfileModal';
 import { ScannedPreprocessingDemo } from '../components/ScannedPreprocessingDemo';
 import { ExecutiveReportModal } from '../components/ExecutiveReportModal';
@@ -18,6 +19,7 @@ import { BidSecurityCalculatorModal } from '../components/BidSecurityCalculatorM
 import { EnvelopePackingChecklistModal } from '../components/EnvelopePackingChecklistModal';
 import { JvCalculatorModal } from '../components/JvCalculatorModal';
 import { ProposalDraftModal } from '../components/ProposalDraftModal';
+import { checkRateLimit } from '../lib/rateLimit';
 
 import { useIsMobile } from '../hooks/use-mobile';
 import { SampleTenderDoc, BidderProfile, AuditReport, TenderComplianceData, PECCategory } from '../lib/types';
@@ -181,6 +183,36 @@ const BLANK_BIDDER_PROFILE: BidderProfile = {
 
 export default function Home() {
   const { user, loading, logout } = useAuth();
+
+  const handleLoadPastTender = async (savedTender: any) => {
+    if (!savedTender?.id) return;
+    try {
+      setIsAnalyzing(true);
+      setAnalysisStage('Loading saved tender...');
+      const full = await getTenderAnalysis(savedTender.id);
+      if (full?.extractedData) {
+        const normalizedData = normalizeTenderData(full.extractedData, full.fileName || 'Saved Tender');
+        setCurrentTender(normalizedData);
+        setIsFallbackData(false);
+      }
+    } catch (err) {
+      console.warn('Could not load past tender:', err);
+    } finally {
+      setIsAnalyzing(false);
+      setAnalysisStage('');
+    }
+  };
+
+  const handleSaveTenderNotes = async (tenderId: string, notes: string) => {
+    try {
+      await updateTenderNotes(tenderId, notes);
+      setSavedTenders(prev => prev.map(t => 
+        t.id === tenderId ? { ...t, notes } : t
+      ));
+    } catch (err) {
+      console.warn('Could not save notes:', err);
+    }
+  };
   const router = useRouter();
   const isMobile = useIsMobile();
 
@@ -345,6 +377,34 @@ export default function Home() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+    const MAX_SIZE_MB = 15;
+    const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      alert('Only PDF, JPEG, PNG, or WebP files are supported. Please upload a valid tender document.');
+      e.target.value = '';
+      return;
+    }
+
+    if (file.size > MAX_SIZE_BYTES) {
+      alert(`File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum allowed size is ${MAX_SIZE_MB} MB. Please compress the PDF and try again.`);
+      e.target.value = '';
+      return;
+    }
+
+    if (user) {
+      const { allowed, remaining } = await checkRateLimit(user.uid);
+      if (!allowed) {
+        alert('You have reached the analysis limit of 20 tenders per hour. Please wait before uploading another tender.');
+        e.target.value = '';
+        return;
+      }
+      if (remaining <= 3) {
+        console.info(`Rate limit: ${remaining} analyses remaining this hour.`);
+      }
+    }
+
     if (!currentBidder?.companyName || currentBidder.companyName.trim() === '') {
       alert("Please fill out your Bidder Profile (Company Name, PEC Category, etc.) before uploading a tender document.");
       setIsBidderModalOpen(true);
@@ -491,6 +551,8 @@ export default function Home() {
         isTenderLoaded={currentTender !== null}
         onSelectTender={handleSelectTender}
         currentBidder={currentBidder}
+        onSaveTenderNotes={handleSaveTenderNotes}
+        onLoadPastTender={handleLoadPastTender}
         onSelectBidder={handleSelectBidder}
         clientSwitcher={
           <ClientSwitcher
@@ -548,6 +610,44 @@ export default function Home() {
                 disabled={isAnalyzing}
               />
             </label>
+            
+            <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-3 
+                            w-full max-w-lg text-left">
+              <div className="bg-gray-800/60 border border-gray-700/50 
+                              rounded-xl p-3">
+                <div className="text-emerald-400 font-bold text-sm mb-1">
+                  1. Set Up Your Client
+                </div>
+                <div className="text-gray-400 text-xs leading-relaxed">
+                  Use the company selector in the header to create 
+                  a client profile with their PEC, NTN, and 
+                  financial details.
+                </div>
+              </div>
+              <div className="bg-gray-800/60 border border-gray-700/50 
+                              rounded-xl p-3">
+                <div className="text-emerald-400 font-bold text-sm mb-1">
+                  2. Upload the Tender
+                </div>
+                <div className="text-gray-400 text-xs leading-relaxed">
+                  Upload any NHA, LDA, C&W or PPRA tender PDF. 
+                  Karez reads up to 12 pages and extracts all 
+                  eligibility requirements automatically.
+                </div>
+              </div>
+              <div className="bg-gray-800/60 border border-gray-700/50 
+                              rounded-xl p-3">
+                <div className="text-emerald-400 font-bold text-sm mb-1">
+                  3. Get Your Audit & Proposal
+                </div>
+                <div className="text-gray-400 text-xs leading-relaxed">
+                  Instantly see your compliance risk score, 
+                  generate a full technical proposal draft, 
+                  and share via PDF or WhatsApp.
+                </div>
+              </div>
+            </div>
+
             <p className="text-gray-500 text-xs mt-4 font-medium">
               Supports scanned and digital PDFs up to 20MB
             </p>
@@ -556,27 +656,31 @@ export default function Home() {
           <div className="flex flex-col lg:flex-row gap-4 flex-1 overflow-hidden">
             {/* Left Panel: Source PDF Document Viewer */}
             <section className="w-full lg:w-1/2 flex flex-col overflow-hidden">
-              <PdfDocumentViewer
-                tender={currentTender}
-                currentPage={currentPage}
-                onPageChange={setCurrentPage}
-                highlightedClauseId={highlightedClauseId}
-                lowConfidencePages={currentTender?.extractedData?.lowConfidencePages || currentTender?.lowConfidencePages || []}
-              />
+              <ErrorBoundary fallbackLabel="PDF viewer error">
+                <PdfDocumentViewer
+                  tender={currentTender}
+                  currentPage={currentPage}
+                  onPageChange={setCurrentPage}
+                  highlightedClauseId={highlightedClauseId}
+                  lowConfidencePages={currentTender?.extractedData?.lowConfidencePages || currentTender?.lowConfidencePages || []}
+                />
+              </ErrorBoundary>
             </section>
 
             {/* Right Panel: Interactive Compliance Checklist & Risk Engine */}
             <section className="w-full lg:w-1/2 flex flex-col overflow-hidden">
-              <ComplianceChecklist
-                auditReport={auditReport}
-                onJumpToPage={handleJumpToPage}
-                onToggleHumanApproval={handleToggleHumanApproval}
-                onUpdateNotes={handleUpdateNotes}
-                onOpenAffidavitModal={() => setIsAffidavitModalOpen(true)}
-                onOpenCdrModal={() => setIsCdrModalOpen(true)}
-                onOpenEnvelopeModal={() => setIsEnvelopeModalOpen(true)}
-                onOpenJvModal={() => setIsJvModalOpen(true)}
-              />
+              <ErrorBoundary fallbackLabel="Compliance panel error">
+                <ComplianceChecklist
+                  auditReport={auditReport}
+                  onJumpToPage={handleJumpToPage}
+                  onToggleHumanApproval={handleToggleHumanApproval}
+                  onUpdateNotes={handleUpdateNotes}
+                  onOpenAffidavitModal={() => setIsAffidavitModalOpen(true)}
+                  onOpenCdrModal={() => setIsCdrModalOpen(true)}
+                  onOpenEnvelopeModal={() => setIsEnvelopeModalOpen(true)}
+                  onOpenJvModal={() => setIsJvModalOpen(true)}
+                />
+              </ErrorBoundary>
             </section>
           </div>
         )}

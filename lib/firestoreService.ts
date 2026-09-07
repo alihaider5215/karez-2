@@ -148,3 +148,18 @@ export async function getTendersByCompany(
 
   return tenders;
 }
+
+export async function updateTenderNotes(
+  tenderId: string, 
+  notes: string
+): Promise<void> {
+  const ref = doc(db, 'tenders', tenderId);
+  await setDoc(ref, { notes, updatedAt: new Date().toISOString() }, { merge: true });
+}
+
+export async function getTenderAnalysis(tenderId: string): Promise<any | null> {
+  const ref = doc(db, 'tenders', tenderId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...snap.data() };
+}

@@ -159,7 +159,7 @@ export function EnvelopePackingChecklistModal({
     const printWin = window.open('', '_blank');
     if (printWin) {
       printWin.document.write(`<!DOCTYPE html>
-<html >
+<html lang="en">
 <head>
   <title>Envelope Packing Slip - ${tender?.ppraRef || tender?.extractedData?.basicInfo?.ppraReferenceNo || 'N/A'} - ${bidder?.companyName || ''}</title>
   <style>
