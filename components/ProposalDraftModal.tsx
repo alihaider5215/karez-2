@@ -133,7 +133,7 @@ export function ProposalDraftModal({
     if (!printWindow) return;
     printWindow.document.write(`
       <!DOCTYPE html>
-      <html lang="en">
+      <html >
         <head>
           <title>${proposalData?.proposalTitle || 'Technical Proposal'}</title>
           <style>

@@ -1,15 +1,15 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, Auth } from 'firebase/auth';
-import { getFirestore, initializeFirestore, Firestore } from 'firebase/firestore';
+import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { getFirestore, initializeFirestore } from 'firebase/firestore';
 import firebaseConfigJson from '../firebase-applet-config.json';
 
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || firebaseConfigJson.apiKey || 'dummy-api-key',
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || firebaseConfigJson.authDomain || 'dummy-auth-domain',
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || firebaseConfigJson.projectId || 'dummy-project-id',
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || firebaseConfigJson.storageBucket || 'dummy-storage-bucket',
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || firebaseConfigJson.messagingSenderId || 'dummy-sender-id',
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || firebaseConfigJson.appId || 'dummy-app-id',
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || firebaseConfigJson.apiKey,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || firebaseConfigJson.authDomain,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || firebaseConfigJson.projectId,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || firebaseConfigJson.storageBucket,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || firebaseConfigJson.messagingSenderId,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || firebaseConfigJson.appId,
 };
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
@@ -18,21 +18,16 @@ const dbId = firebaseConfigJson.firestoreDatabaseId && firebaseConfigJson.firest
   ? firebaseConfigJson.firestoreDatabaseId
   : undefined;
 
-// Lazy initialization for client-side only to prevent Next.js SSR fetch polyfill issues
-let db: Firestore = {} as Firestore;
-let auth: Auth = {} as Auth;
-let googleProvider: GoogleAuthProvider = {} as GoogleAuthProvider;
-
-if (typeof window !== 'undefined') {
-  try {
-    db = dbId 
-      ? initializeFirestore(app, { experimentalForceLongPolling: true }, dbId)
-      : initializeFirestore(app, { experimentalForceLongPolling: true });
-  } catch (e) {
-    db = getFirestore(app);
-  }
-  auth = getAuth(app);
-  googleProvider = new GoogleAuthProvider();
+let dbInstance;
+try {
+  dbInstance = dbId 
+    ? initializeFirestore(app, { experimentalForceLongPolling: true }, dbId)
+    : initializeFirestore(app, { experimentalForceLongPolling: true });
+} catch {
+  dbInstance = dbId ? getFirestore(app, dbId) : getFirestore(app);
 }
 
-export { db, auth, googleProvider };
+export const db = dbInstance;
+
+export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
